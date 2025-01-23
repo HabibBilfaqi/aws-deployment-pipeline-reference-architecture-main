@@ -1,0 +1,38 @@
+{
+	"name": "dpra",
+	"build": {
+		"dockerfile": "Dockerfile",
+		"context": ".."
+	},
+
+	"mounts": [
+		"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind",
+		"source=${localEnv:HOME}${localEnv:USERPROFILE}/.aws,target=/home/vscode/.aws,type=bind",
+		"source=${localEnv:HOME}${localEnv:USERPROFILE}/.ssh,target=/home/vscode/.ssh,type=bind"
+
+	],
+	"runArgs": [ "--net=host", "--privileged" ],
+
+	"settings": {
+		"terminal.integrated.shell.linux": "/bin/bash",
+		"python.pythonPath": "/usr/bin/python3",
+		"python.linting.enabled": true,
+		"python.linting.pylintEnabled": true,
+		"python.formatting.blackPath": "/usr/local/bin/black",
+		"python.linting.pylintPath": "/usr/local/bin/pylint"
+	},
+
+	"extensions": [
+		"ms-azuretools.vscode-docker",
+		"ms-python.python",
+		"hediet.vscode-drawio"
+	],
+
+	"containerEnv": {
+		"DISPLAY": ":5.0"
+	},
+
+	"forwardPorts": [8000],
+	"postCreateCommand": "nohup bash -c 'Xvfb :5 -screen 0 1920x1080x8 &' > /dev/null",
+	"remoteUser": "vscode"
+}

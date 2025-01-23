@@ -1,0 +1,87 @@
+# You can override the included template(s) by including variable overrides
+# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
+# Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/#customizing-settings
+# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
+# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
+# Note that environment variables can be set in several places
+# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+stages:
+- build
+- deploy
+sast:
+  stage: build
+include:
+- template: Security/SAST.gitlab-ci.yml
+
+markdownlint:
+  stage: build
+  image: node:18.8-bullseye
+  script:
+  - npm install -g markdownlint-cli
+  - markdownlint docs
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE  == 'push' && $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+
+mkdocs:
+  stage: build
+  variables:
+    ENABLE_PDF_EXPORT: 1
+  image: python:3.9-bullseye
+  before_script:
+  - apt-get update && apt-get install -y graphviz=2.42.2-5 wget curl libgbm-dev libasound2 xvfb
+  - Xvfb :5 -screen 0 1920x1080x8 &
+  - export DISPLAY=':5.0'
+  - curl -s https://api.github.com/repos/jgraph/drawio-desktop/releases/latest | grep browser_download_url | grep '\.deb' | cut -d '"' -f 4 | wget -i -
+  - apt -f install -y ./drawio-amd64-*.deb
+  - pip install -r requirements.txt
+  script:
+  - mkdocs build --verbose --site-dir site
+  artifacts:
+    paths:
+    - site
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      variables:
+        USE_DIRECTORY_URLS: 'false'
+    - if: $CI_PIPELINE_SOURCE  == 'push' && $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+
+pages:
+  stage: deploy
+
+  script:
+  - mkdir -p public
+  - cp -a site/* public/
+  - echo "$CI_PAGES_URL"
+
+  artifacts:
+    paths:
+    - public
+
+  environment:
+    name: production-gitlab
+    url: $CI_PAGES_URL
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE  == 'push' && $CI_COMMIT_REF_NAME == $CI_DEFAULT_BRANCH
+
+pages:preview:
+  stage: deploy
+
+  script:
+  - echo "PREVIEW_URL=${CI_SERVER_PROTOCOL}://${CI_PROJECT_ROOT_NAMESPACE}.${CI_PAGES_DOMAIN}/-/${CI_PROJECT_PATH#${CI_PROJECT_ROOT_NAMESPACE}/}/-/jobs/$CI_JOB_ID/artifacts/site/index.html" > deploy.env
+
+  artifacts:
+    paths:
+    - site
+    reports:
+      dotenv: deploy.env
+
+  environment:
+    name: mr-$CI_MERGE_REQUEST_IID
+    url: $PREVIEW_URL
+    auto_stop_in: 30 days
+
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
